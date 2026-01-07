@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <title>🏆 CrashGold Monitor</title>
+    <link href="https://cdn.jsdelivr.net/gh/rastikerdar/vazirmatn@v33.003/Vazirmatn-font-face.css" rel="stylesheet" />
+    <link href="https://fonts.googleapis.com/css2?family=Roboto+Mono:wght@400;700&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        :root { --bg: #1a1a1a; --card-bg: #2d2d2d; --text: #e0e0e0; --gold: #f1c40f; --green: #2ecc71; --red: #e74c3c; }
+        body { font-family: 'Vazirmatn', sans-serif; background: var(--bg); color: var(--text); margin: 0; padding: 20px; }
+        .mono { font-family: 'Roboto Mono', monospace; }
+        
+        .header { display: flex; justify-content: space-between; align-items: center; background: var(--card-bg); padding: 20px; border-radius: 12px; border-bottom: 3px solid var(--gold); margin-bottom: 20px; }
+        .header h2 { margin: 0; color: var(--gold); text-shadow: 0 0 10px rgba(241, 196, 15, 0.3); }
+        
+        .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; margin-bottom: 20px; }
+        .card { background: var(--card-bg); padding: 20px; border-radius: 10px; text-align: center; border: 1px solid #444; }
+        .card h3 { color: #888; font-size: 0.9em; margin: 0 0 10px 0; }
+        .card p { font-size: 1.8em; margin: 0; font-weight: bold; color: var(--gold); }
+        
+        table { width: 100%; border-collapse: collapse; background: var(--card-bg); border-radius: 10px; overflow: hidden; margin-top: 20px; }
+        th { background: #333; color: var(--gold); padding: 15px; text-align: center; }
+        td { padding: 12px; border-bottom: 1px solid #444; text-align: center; font-size: 0.9em; }
+        
+        .pos { color: var(--green); } .neg { color: var(--red); }
+        .badge { padding: 4px 8px; border-radius: 4px; font-size: 0.8em; background: #444; }
+        .bg-buy { background: rgba(46, 204, 113, 0.2); color: var(--green); }
+        .bg-sell { background: rgba(231, 76, 60, 0.2); color: var(--red); }
+        
+        #last-update { font-size: 0.8em; color: #666; }
+    </style>
+</head>
+<body>
+
+<div class="header">
+    <div><h2>✨ CrashGold <span style="font-size:0.5em; color:#fff">Live Portfolio</span></h2></div>
+    <div id="last-update" class="mono">Connecting...</div>
+</div>
+
+<div class="stats-grid">
+    <div class="card"><h3>Balance</h3><p class="mono" id="bal">---</p></div>
+    <div class="card"><h3>Equity</h3><p class="mono" id="equ">---</p></div>
+    <div class="card"><h3>Today Profit</h3><p class="mono" id="prof">---</p></div>
+    <div class="card"><h3>Total Trades</h3><p class="mono" id="count">0</p></div>
+</div>
+
+<h3 style="color:var(--gold)">🚀 Live Positions</h3>
+<table>
+    <thead><tr><th>Ticket</th><th>Symbol</th><th>Type</th><th>Vol</th><th>Price</th><th>Profit</th></tr></thead>
+    <tbody id="pos-body"></tbody>
+</table>
+
+<h3 style="color:var(--gold); margin-top:30px">📜 Recent History (Last 10)</h3>
+<table>
+    <thead><tr><th>Time</th><th>Symbol</th><th>Type</th><th>Price</th><th>Profit</th></tr></thead>
+    <tbody id="hist-body"></tbody>
+</table>
+
+<div style="background:var(--card-bg); padding:15px; border-radius:10px; margin-top:30px; border:1px solid #444;">
+    <canvas id="chart" height="80"></canvas>
+</div>
+
+<script>
+    const ctx = document.getElementById('chart').getContext('2d');
+    let chart = new Chart(ctx, {
+        type: 'line', 
+        data: {labels:[], datasets:[{label:'Growth', data:[], borderColor:'#f1c40f', backgroundColor:'rgba(241, 196, 15, 0.1)', fill:true, tension:0.3}]},
+        options: {
+            plugins: {legend:{display:false}}, 
+            scales: {
+                x:{grid:{color:'#444'}, ticks:{color:'#888'}}, 
+                y:{grid:{color:'#444'}, ticks:{color:'#888'}}
+            }
+        }
+    });
+
+    async function loadData() {
+        try {
+            // خواندن فایل جیسون (با پارامتر زمان برای جلوگیری از کش شدن)
+            const res = await fetch('data.json?t=' + new Date().getTime());
+            const d = await res.json();
+
+            document.getElementById('last-update').innerText = "Last Update: " + d.last_update;
+            document.getElementById('bal').innerText = d.balance.toFixed(2) + " $";
+            document.getElementById('equ').innerText = d.equity.toFixed(2) + " $";
+            
+            const p = document.getElementById('prof');
+            p.innerText = (d.today_profit>0?'+':'') + d.today_profit.toFixed(2) + " $";
+            p.style.color = d.today_profit >= 0 ? 'var(--green)' : 'var(--red)';
+            
+            document.getElementById('count').innerText = d.total_trades;
+
+            // Positions
+            const pb = document.getElementById('pos-body');
+            pb.innerHTML = d.positions.length ? d.positions.map(x => `
+                <tr><td class="mono">${x.ticket}</td><td>${x.symbol}</td>
+                <td><span class="badge ${x.type==='BUY'?'bg-buy':'bg-sell'}">${x.type}</span></td>
+                <td class="mono">${x.volume}</td><td class="mono">${x.price}</td>
+                <td class="mono ${x.profit>=0?'pos':'neg'}">${x.profit.toFixed(2)}</td></tr>
+            `).join('') : '<tr><td colspan="6" style="padding:20px; color:#666">No Open Positions</td></tr>';
+
+            // History
+            const hb = document.getElementById('hist-body');
+            hb.innerHTML = d.history.slice(0, 10).map(x => `
+                <tr><td class="mono">${x.time}</td><td>${x.symbol}</td>
+                <td><span class="badge ${x.type==='BUY'?'bg-buy':'bg-sell'}">${x.type}</span></td>
+                <td class="mono">${x.price}</td>
+                <td class="mono ${x.profit>=0?'pos':'neg'}">${x.profit.toFixed(2)}</td></tr>
+            `).join('');
+
+            // Chart
+            chart.data.labels = d.equity_curve.map((_,i)=>i);
+            chart.data.datasets[0].data = d.equity_curve;
+            chart.update();
+
+        } catch(e) { console.log("Waiting for data..."); }
+    }
+
+    setInterval(loadData, 5000); // هر 5 ثانیه چک کن
+    loadData();
+</script>
+</body>
+</html>
